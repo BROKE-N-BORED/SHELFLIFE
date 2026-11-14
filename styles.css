@@ -376,6 +376,25 @@ main {
   font-size: 34px;
   flex: none;
 }
+/* A saved photo the browser cannot draw: shown as the plain box
+   placeholder, never a broken image icon. Keeps the classes of the
+   image it replaces, so it sits in the same spot. */
+.photo-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #efe9db;
+  font-size: 34px;
+}
+.scene-thumb .photo-missing {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 80px;
+  border-radius: 10px;
+}
 .item-body { flex: 1; min-width: 0; }
 .item-name { font-weight: 700; font-size: 18px; }
 .item-serial { color: var(--ink-soft); font-size: 14px; }

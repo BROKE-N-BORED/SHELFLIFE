@@ -1,5 +1,23 @@
 # ShelfLife changelog
 
+## v1.0.1 - 2026-11-14
+
+Photo fix: any picture is accepted now, whatever its size or file type.
+
+- Removed the photo type check and the "try a different photo"
+  rejections. A picture is never turned away: JPEG, PNG, WebP, HEIC,
+  AVIF, TIFF, GIF, BMP, and anything else the picker hands over.
+- Big photos are shrunk before storing: long edge and total pixels are
+  capped, and the quality steps down until the photo fits.
+- A picture the browser cannot decode is still kept with the item
+  (original file data), through a second decode attempt first. The item
+  can always be created.
+- A saved photo that cannot be drawn shows the plain box placeholder,
+  never a broken image icon.
+- If reading a photo ever fails, the message says the photo is fine and
+  to try picking the same one again.
+- Privacy line and one-photo picker unchanged.
+
 ## v1.0.0 - 2026-11-14
 
 First release. The full ShelfLife flow as a standalone web app:

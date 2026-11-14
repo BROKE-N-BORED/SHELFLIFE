@@ -434,6 +434,21 @@
       .replace(/"/g, '&quot;');
   }
 
+  /* A saved photo the browser cannot draw must never show as a broken
+     image icon. Swap it for the plain box placeholder instead, keeping
+     the spot it was in. This lives on window because the image tags are
+     built as HTML strings. */
+  if (typeof window !== 'undefined') {
+    window.shelflifePhotoError = function (img) {
+      if (!img || !img.parentNode) return;
+      var span = document.createElement('span');
+      span.className = (img.className || '') + ' photo-missing';
+      span.setAttribute('aria-hidden', 'true');
+      span.innerHTML = '&#128230;';
+      img.parentNode.replaceChild(span, img);
+    };
+  }
+
   function setStatus(text, busy) {
     var dot = $('statusDot');
     var label = $('statusText');
@@ -614,7 +629,7 @@
       : it.status === 'sold' ? '<span class="pill pill-sold">Sold</span>'
       : '<span class="pill pill-ended">Ended</span>';
     var thumb = it.photo
-      ? '<img class="item-thumb" src="' + it.photo + '" alt="">'
+      ? '<img class="item-thumb" src="' + it.photo + '" alt="" onerror="shelflifePhotoError(this)">'
       : '<span class="item-thumb-placeholder" aria-hidden="true">&#128230;</span>';
     var left = '';
     if (it.status === 'live') {
@@ -814,7 +829,7 @@
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
       var thumb = it.photo
-        ? '<img class="item-thumb" src="' + it.photo + '" alt="">'
+        ? '<img class="item-thumb" src="' + it.photo + '" alt="" onerror="shelflifePhotoError(this)">'
         : '<span class="item-thumb-placeholder" aria-hidden="true">&#128230;</span>';
       html += '<div class="card"><div class="item-card">' + thumb +
         '<div class="item-body"><div class="item-name">' + escapeHtml(it.name) + '</div>' +
@@ -927,7 +942,7 @@
     if (!draft) { showScreen('home'); return; }
     if (draft.step === 1) {
       var preview = draft.photo
-        ? '<img class="photo-frame" src="' + draft.photo + '" alt="Your photo">'
+        ? '<img class="photo-frame" src="' + draft.photo + '" alt="Your photo" onerror="shelflifePhotoError(this)">'
         : '';
       box.innerHTML = stepHead(1, 6, 'Take or pick one photo') +
         '<div class="privacy-line">Pick one photo. ShelfLife only sees the photos you pick — never your whole library.</div>' +
@@ -1012,7 +1027,7 @@
   }
 
   function stagedPreviewHtml() {
-    var img = draft.photo ? '<img class="staged-img" src="' + draft.photo + '" alt="">' : '';
+    var img = draft.photo ? '<img class="staged-img" src="' + draft.photo + '" alt="" onerror="shelflifePhotoError(this)">' : '';
     return '<div class="staged-preview"><div class="scene-stage ' + sceneClass(draft.scene) + '"></div>' +
       img +
       '<div class="staged-masthead">SHELFLIFE</div>' +
@@ -1024,7 +1039,7 @@
     var html = '<div class="scene-pick">';
     for (var i = 0; i < SCENES.length; i++) {
       var sc = SCENES[i];
-      var img = draft.photo ? '<img src="' + draft.photo + '" alt="">' : '';
+      var img = draft.photo ? '<img src="' + draft.photo + '" alt="" onerror="shelflifePhotoError(this)">' : '';
       html += '<button class="scene-option" data-scene="' + sc.key + '" aria-pressed="' + (draft.scene === sc.key) + '" type="button">' +
         '<span class="scene-thumb ' + sc.css + '">' + img + '</span>' +
         '<span class="scene-name">' + escapeHtml(sc.label) + '</span></button>';
@@ -1170,48 +1185,151 @@
     renderAddStep();
   }
 
+  /* Photo size caps: big photos are shrunk so they fit in on-device
+     storage. No photo is ever rejected for size. */
+  var PHOTO_MAX_EDGE = 1200;
+  var PHOTO_MAX_PIXELS = 1200000;
+  var PHOTO_MAX_CHARS = 400000;
+
+  /* Shrink target size for a photo of the given dimensions: cap the long
+     edge and the total pixels. Pure, so the smoke tests can check it. */
+  function computeShrinkSize(w, h) {
+    if (!w || !h || w <= 0 || h <= 0) return { width: 0, height: 0 };
+    var scale = Math.min(1, PHOTO_MAX_EDGE / w, PHOTO_MAX_EDGE / h);
+    var pixels = w * h * scale * scale;
+    if (pixels > PHOTO_MAX_PIXELS) {
+      scale *= Math.sqrt(PHOTO_MAX_PIXELS / pixels);
+    }
+    return { width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) };
+  }
+
+  /* Draw a decoded picture (image or bitmap) to a canvas and encode it
+     as a JPEG, stepping the quality down, then the size down, until it
+     fits the storage cap. Returns the data URL. */
+  function encodeShrunk(source, width, height) {
+    var size = computeShrinkSize(width, height);
+    var canvas = document.createElement('canvas');
+    canvas.width = size.width;
+    canvas.height = size.height;
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(source, 0, 0, size.width, size.height);
+    var quality = 0.82;
+    var url = canvas.toDataURL('image/jpeg', quality);
+    var guard = 0;
+    while (url.length > PHOTO_MAX_CHARS && guard < 10) {
+      guard++;
+      if (quality > 0.4) {
+        quality = Math.round((quality - 0.1) * 10) / 10;
+      } else {
+        size.width = Math.max(1, Math.round(size.width * 0.7));
+        size.height = Math.max(1, Math.round(size.height * 0.7));
+        canvas.width = size.width;
+        canvas.height = size.height;
+        ctx = canvas.getContext('2d');
+        ctx.drawImage(source, 0, 0, size.width, size.height);
+        quality = 0.6;
+      }
+      url = canvas.toDataURL('image/jpeg', quality);
+    }
+    return url;
+  }
+
+  /* The browser could not decode this picture (some HEIC, AVIF, or TIFF
+     files). Keep the original anyway: the item can still be created
+     with it, and the photo stays saved with the item. */
+  function keepOriginal(original) {
+    if (!draft) { setStatus('Ready', false); return; }
+    draft.photo = original;
+    setStatus('Ready', false);
+    renderAddStep();
+  }
+
+  /* Second decode path: createImageBitmap understands some formats the
+     plain image loader does not. If it fails too, keep the original. */
+  function trySecondDecode(file, original) {
+    if (typeof createImageBitmap !== 'function') { keepOriginal(original); return; }
+    var settled = false;
+    try {
+      var p = createImageBitmap(file);
+      if (p && typeof p.then === 'function') {
+        p.then(function (bitmap) {
+          if (settled) return;
+          settled = true;
+          if (!bitmap || !bitmap.width || !bitmap.height) { keepOriginal(original); return; }
+          if (!draft) { setStatus('Ready', false); return; }
+          try {
+            draft.photo = encodeShrunk(bitmap, bitmap.width, bitmap.height);
+          } catch (e) {
+            keepOriginal(original);
+            return;
+          }
+          if (bitmap.close) { try { bitmap.close(); } catch (e2) { /* ignore */ } }
+          setStatus('Ready', false);
+          renderAddStep();
+        }, function () {
+          if (settled) return;
+          settled = true;
+          keepOriginal(original);
+        });
+      } else if (p) {
+        settled = true;
+        if (!draft) { setStatus('Ready', false); return; }
+        try {
+          draft.photo = encodeShrunk(p, p.width, p.height);
+        } catch (e) {
+          keepOriginal(original);
+          return;
+        }
+        setStatus('Ready', false);
+        renderAddStep();
+      } else {
+        keepOriginal(original);
+      }
+    } catch (e) {
+      if (!settled) keepOriginal(original);
+    }
+  }
+
   /* Photo picking: one photo at a time through the system picker. The app
-     only ever receives the photo the user picks. Photos are resized so
-     they fit in on-device storage. */
+     only ever receives the photo the user picks. ANY picture is accepted:
+     any size, any file type, as long as it is a picture. There is no
+     type list and no size limit that turns a photo away. Big photos are
+     shrunk to fit storage, and a picture the browser cannot decode is
+     kept as-is instead of refused. A photo is never turned away. */
   function handlePhotoFile(file) {
     if (!file) return;
-    if (file.type.indexOf('image/') !== 0) {
-      showToast('That did not look like a photo. Pick an image file.');
-      return;
-    }
     setStatus('Reading photo', true);
     var reader = new FileReader();
     reader.onload = function () {
+      var original = reader.result;
       var img = new Image();
       img.onload = function () {
-        var max = 900;
-        var w = img.width;
-        var h = img.height;
-        if (w > max || h > max) {
-          var scale = Math.min(max / w, max / h);
-          w = Math.round(w * scale);
-          h = Math.round(h * scale);
+        if (!img.width || !img.height) { keepOriginal(original); return; }
+        if (!draft) { setStatus('Ready', false); return; }
+        try {
+          draft.photo = encodeShrunk(img, img.width, img.height);
+        } catch (e) {
+          keepOriginal(original);
+          return;
         }
-        var canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        var ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-        draft.photo = canvas.toDataURL('image/jpeg', 0.82);
         setStatus('Ready', false);
         renderAddStep();
       };
       img.onerror = function () {
-        setStatus('Ready', false);
-        showToast('Could not read that photo. Try a different one.');
+        trySecondDecode(file, original);
       };
-      img.src = reader.result;
+      img.src = original;
     };
     reader.onerror = function () {
       setStatus('Ready', false);
-      showToast('Could not read that photo. Try a different one.');
+      showToast('That photo is fine. Please try picking the same one again.');
     };
-    reader.readAsDataURL(file);
+    try {
+      reader.readAsDataURL(file);
+    } catch (e) {
+      setStatus('Ready', false);
+      showToast('That photo is fine. Please try picking the same one again.');
+    }
   }
 
   /* Build the staged magazine photo as a real image file to keep or share. */
@@ -1401,7 +1519,18 @@
       unreadCount: unreadCount,
       liveItems: liveItems,
       platosItems: platosItems,
-      emptyState: emptyState
+      emptyState: emptyState,
+      /* Test hook for the photo flow: the smoke tests drive the real
+         handlePhotoFile with mocked browser APIs. */
+      __photoTest: {
+        handlePhotoFile: handlePhotoFile,
+        computeShrinkSize: computeShrinkSize,
+        encodeShrunk: encodeShrunk,
+        startAdd: startAdd,
+        publishDraft: publishDraft,
+        getDraft: function () { return draft; },
+        getState: function () { return state; }
+      }
     };
   }
 })();

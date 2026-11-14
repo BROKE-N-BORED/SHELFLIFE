@@ -24,7 +24,9 @@ in your browser on that device only. Nothing leaves the device.
    all 30 marketplace accounts organized. They are saved only on the device.
 2. Tap Sell something and pick one photo. ShelfLife only sees the photos
    you pick, one at a time, through your device's own photo picker. It
-   never sees your whole photo library.
+   never sees your whole photo library. Any photo works, whatever its
+   size or file type: big photos are shrunk to fit on the device, and
+   a photo the browser cannot open is still kept with the item.
 3. Say what the item is, pick what kind of thing it is, and what shape
    it is in (Like New down to For Parts).
 4. Pick a magazine style scene. ShelfLife composes your photo into it,
@@ -50,7 +52,8 @@ in your browser on that device only. Nothing leaves the device.
   post straight to the real marketplaces. To put a listing live on a
   real site, open the site from the listing and post it there.
 - Photos are resized when you add them so everything fits in browser
-  storage on the device.
+  storage on the device. A photo the browser cannot open (some HEIC,
+  AVIF, or TIFF files) is still kept with the item instead of refused.
 - One marketplace on the list only takes professional dealers. It is
   flagged in the app and cannot be listed on without a dealer account.
 - One marketplace for physical music shows its own database photo instead
