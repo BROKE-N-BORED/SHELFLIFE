@@ -1,0 +1,17 @@
+# Local config and secrets are never committed.
+.env
+*.env
+*.local
+config.local.json
+secrets.*
+*.pem
+*.key
+
+# OS and editor leftovers.
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Tooling (not used by this app, kept out if it ever appears).
+node_modules/

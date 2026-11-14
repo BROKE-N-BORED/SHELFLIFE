@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="ShelfLife: one photo, listed everywhere for 30 days.">
+<title>ShelfLife</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">S</span>
+    <span class="brand-name">ShelfLife</span>
+  </div>
+  <div class="topbar-actions">
+    <span class="status-dot" id="statusDot" aria-hidden="true"></span>
+    <span class="status-text" id="statusText">Ready</span>
+    <button class="icon-btn" id="howtoBtn" type="button" aria-label="How to use ShelfLife">?</button>
+    <button class="icon-btn" id="settingsBtn" type="button" aria-label="Settings">&#9881;</button>
+  </div>
+</header>
+
+<main id="main">
+  <!-- First-run setup -->
+  <section class="screen" id="screen-setup" hidden>
+    <h1>Welcome to ShelfLife</h1>
+    <p class="lede">One photo. ShelfLife lists your item on the sites most likely to sell it, runs the listings for 30 days, and only tells you about it if it sells or the 30 days are up.</p>
+    <div class="card">
+      <h2>Your account</h2>
+      <p class="hint">One email and password. ShelfLife uses these to keep all your marketplace accounts organized.</p>
+      <label class="field">
+        <span class="field-label">Email</span>
+        <input id="setupEmail" type="email" autocomplete="email" placeholder="you@example.com">
+        <span class="field-help">The email your marketplace accounts are kept under.</span>
+      </label>
+      <label class="field">
+        <span class="field-label">Password</span>
+        <input id="setupPassword" type="password" autocomplete="new-password" placeholder="Pick a password">
+        <span class="field-help">Saved only on this device. ShelfLife never sends it anywhere.</span>
+      </label>
+      <button class="btn btn-primary btn-big" id="setupGo" type="button">Set up my accounts</button>
+      <p class="field-help" id="setupProgress" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <!-- Home / Sell -->
+  <section class="screen" id="screen-home" hidden>
+    <h1>What are you selling today?</h1>
+    <p class="lede">One photo is all it takes. ShelfLife does the rest.</p>
+    <button class="sell-cta" id="sellCta" type="button">
+      <span class="sell-cta-icon" aria-hidden="true">&#128247;</span>
+      <span class="sell-cta-text">Sell something</span>
+      <span class="sell-cta-sub">Tap here, pick one photo</span>
+    </button>
+    <div class="card">
+      <h2>On the shelf</h2>
+      <div id="homeSummary"></div>
+    </div>
+    <div class="card">
+      <h2>How it works</h2>
+      <ol class="steps-list">
+        <li>You pick one photo of the item.</li>
+        <li>ShelfLife makes a magazine style photo of it and suggests a price.</li>
+        <li>It lists the item on the best sites for 30 days.</li>
+        <li>You only hear about it if it sells, or when the 30 days are up.</li>
+        <li>Anything unsold goes on your Plato's Closet list.</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- Add item flow -->
+  <section class="screen" id="screen-add" hidden>
+    <div id="addFlow"></div>
+  </section>
+
+  <!-- My items -->
+  <section class="screen" id="screen-items" hidden>
+    <h1>My items</h1>
+    <p class="lede">Everything you have added, with its serial number and how long is left.</p>
+    <div id="itemsList"></div>
+  </section>
+
+  <!-- Sites -->
+  <section class="screen" id="screen-sites" hidden>
+    <h1>Sites</h1>
+    <p class="lede">The 30 marketplaces ShelfLife lists on. Tap one to see what it is good for and how its account is doing.</p>
+    <p class="note">ShelfLife keeps your marketplace accounts organized here. Creating a real account still happens on each site the first time you visit it.</p>
+    <div id="sitesList"></div>
+  </section>
+
+  <!-- Alerts -->
+  <section class="screen" id="screen-alerts" hidden>
+    <h1>Alerts</h1>
+    <p class="lede">You only get told about two things: something sold, or 30 days are up. Nothing else.</p>
+    <button class="btn btn-secondary" id="markReadBtn" type="button">Mark all as read</button>
+    <div id="alertsList"></div>
+  </section>
+
+  <!-- Plato's Closet -->
+  <section class="screen" id="screen-platos" hidden>
+    <h1>Plato's Closet list</h1>
+    <p class="lede">Items that ran their 30 days without selling. Take this list with you.</p>
+    <div class="row">
+      <button class="btn btn-primary" id="exportCsvBtn" type="button">Download the list</button>
+      <button class="btn btn-secondary" id="copyListBtn" type="button">Copy the list</button>
+    </div>
+    <div id="platosList"></div>
+  </section>
+
+  <!-- How to use -->
+  <section class="screen" id="screen-howto" hidden>
+    <h1>How to use ShelfLife</h1>
+    <div class="card">
+      <h2>Sell something</h2>
+      <ol class="steps-list">
+        <li>Tap Sell something on the home screen.</li>
+        <li>Pick one photo of the item. ShelfLife only sees the photos you pick.</li>
+        <li>Say what it is and what shape it is in.</li>
+        <li>Pick a magazine style scene for the photo.</li>
+        <li>Check the suggested price. Take it or set your own.</li>
+        <li>ShelfLife ticks the best sites. Untick any you do not want.</li>
+        <li>Tap List it. Done. Your item gets a serial number like SL-0001.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h2>The 30 days</h2>
+      <p>Every listing runs for 30 days. You will not hear from ShelfLife during that time unless the item sells. On day 30 the listing comes down and the item moves to your Plato's Closet list.</p>
+    </div>
+    <div class="card">
+      <h2>The price guide</h2>
+      <p>ShelfLife suggests a price from a built-in guide for the item type and condition. It is a guide, not live sales data. Tap Check live prices to see what the same item really sold for, then set your price.</p>
+    </div>
+    <div class="card">
+      <h2>Your photos</h2>
+      <p>ShelfLife never sees your whole photo library. You pick one photo at a time with your phone's own picker, and that is the only photo the app ever gets.</p>
+    </div>
+    <div class="card">
+      <h2>Your account</h2>
+      <p>Your email and password are saved only on this device. ShelfLife never sends them anywhere. Your items, photos, and lists live on this device too.</p>
+    </div>
+    <div class="card">
+      <h2>An honest note</h2>
+      <p>This copy of ShelfLife manages your listings inside itself: it tracks them, counts the 30 days, and tells you when something sells or time is up. It does not post straight to the real marketplaces. To put a listing live on a real site, open the site from the listing and post it there. Your serial number, photos, and details stay with the item here.</p>
+    </div>
+  </section>
+
+  <!-- Settings -->
+  <section class="screen" id="screen-settings" hidden>
+    <h1>Settings</h1>
+    <div class="card">
+      <h2>My account</h2>
+      <div id="settingsAccount"></div>
+    </div>
+    <div class="card">
+      <h2>Storage</h2>
+      <div id="settingsStorage"></div>
+    </div>
+    <div class="card">
+      <h2>Start over</h2>
+      <p>Erase everything ShelfLife has saved on this device: your account, items, photos, listings, and alerts. This cannot be undone.</p>
+      <button class="btn btn-danger" id="wipeBtn" type="button">Erase everything</button>
+    </div>
+  </section>
+</main>
+
+<nav class="tabbar" aria-label="Main">
+  <button class="tab" data-screen="home" type="button"><span class="tab-icon" aria-hidden="true">&#128247;</span><span>Sell</span></button>
+  <button class="tab" data-screen="items" type="button"><span class="tab-icon" aria-hidden="true">&#128230;</span><span>My items</span></button>
+  <button class="tab" data-screen="sites" type="button"><span class="tab-icon" aria-hidden="true">&#127978;</span><span>Sites</span></button>
+  <button class="tab" data-screen="alerts" type="button"><span class="tab-icon" aria-hidden="true">&#128276;</span><span>Alerts</span><span class="tab-badge" id="alertBadge" hidden>0</span></button>
+  <button class="tab" data-screen="platos" type="button"><span class="tab-icon" aria-hidden="true">&#128092;</span><span>Plato's</span></button>
+</nav>
+
+<input type="file" id="photoInput" accept="image/*" hidden>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<div class="dialog-backdrop" id="dialogBackdrop" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
+    <h2 id="dialogTitle"></h2>
+    <p id="dialogText"></p>
+    <div class="dialog-actions">
+      <button class="btn btn-secondary" id="dialogNo" type="button">No, keep it</button>
+      <button class="btn btn-danger" id="dialogYes" type="button">Yes, do it</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
