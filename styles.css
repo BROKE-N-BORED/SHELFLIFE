@@ -547,6 +547,31 @@ main {
   color: var(--green-deep);
 }
 
+/* Listing creation states (v1.1.0) */
+.pill-queued { background: #e3eaf0; color: #33566e; }
+.pill-creating { background: #f7e3bd; color: #7a5410; }
+.pill-check { background: #f8e3df; color: var(--danger); }
+.pill-failed { background: var(--danger); color: #fff; }
+
+.listings { margin: 8px 0; }
+.listing-row { border-top: 1px solid var(--line); padding: 12px 0; }
+.listing-row:first-child { border-top: none; }
+.listing-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.listing-site { font-weight: 700; font-size: 16px; }
+.listing-note { font-size: 14px; color: var(--ink-soft); margin: 4px 0 8px; }
+.listing-actions { margin-bottom: 0; }
+
+.update-panel {
+  background: #f8f4e8;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  margin-top: 10px;
+}
+.update-panel h2 { font-size: 18px; }
+.update-panel .row { margin-bottom: 8px; }
+.update-panel .row:last-child { margin-bottom: 0; }
+
 .link-btn {
   background: none;
   border: none;

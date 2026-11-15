@@ -1,5 +1,29 @@
 # ShelfLife changelog
 
+## v1.1.0 - 2026-11-15
+
+Creation-model rebuild: ShelfLife creates the listings now. The old
+"manages listings inside itself" framing is gone.
+
+- Listings are queued for creation with true states: in line, being
+  created, live, needs a check, or could not be created (with the
+  reason). Each listing shows its state in plain words on the item.
+- Live-proof gate: a listing only counts as live when ShelfLife has
+  its real address on that site's own domain. No address, no live.
+- The 30-day clock starts when the first listing goes live, not
+  before. Items still in line never run out of time.
+- Human checks name the exact check (sign-in, puzzle check, or
+  verification code), and a listing that needs one can be tried again
+  once the check is done. Failed listings can be tried again too.
+- Items saved by older versions were only tracked inside the app, so
+  they are not live: they go back in line to be created, with the
+  30-day clock cleared until one genuinely goes live.
+- A sale closes live listings and cancels listings still in line.
+  Taking an item down works while it is still in line too.
+- The price guide is unchanged: built-in offline ranges plus
+  live-check links, and an honest "No good match found" when there
+  is no guide entry.
+
 ## v1.0.1 - 2026-11-14
 
 Photo fix: any picture is accepted now, whatever its size or file type.

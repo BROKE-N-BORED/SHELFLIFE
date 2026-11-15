@@ -1,9 +1,9 @@
 # ShelfLife
 
-One photo. ShelfLife lists your item on the sites most likely to sell it,
-runs the listings for 30 days, and only tells you about it if it sells or
-the 30 days are up. Anything unsold lands on one exportable list of items
-to take to Plato's Closet.
+One photo. ShelfLife creates the listings for your item on the sites
+most likely to sell it, runs them for 30 days, and only tells you about
+it if it sells or the 30 days are up. Anything unsold lands on one
+exportable list of items to take to Plato's Closet.
 
 This is the standalone copy of ShelfLife. It runs entirely in the browser:
 no server, no build step, no account with anyone, and nothing to install.
@@ -35,11 +35,13 @@ in your browser on that device only. Nothing leaves the device.
    gives one-tap links to check what the same item really sold for.
    Take the price or set your own.
 6. ShelfLife ticks the sites most likely to sell the item. Untick any
-   you do not want. Tap List it. The item gets a serial number
+   you do not want. Tap Create the listings. The listings go in line
+   to be created, and the item gets a serial number
    (SL-0001, SL-0002, ...) saved with the original photo.
-7. Listings run for 30 days. You hear nothing unless the item sells.
-   On day 30 the listings come down and the item moves to the
-   Plato's Closet list, which you can download as a CSV file or copy.
+7. The 30 days start when the first listing goes live, not before.
+   You hear nothing unless the item sells. On day 30 the listings
+   come down and the item moves to the Plato's Closet list, which
+   you can download as a CSV file or copy.
 
 ## Honest limits
 
@@ -47,10 +49,14 @@ in your browser on that device only. Nothing leaves the device.
   the item type and condition. It is not live sales data, and ShelfLife
   never makes up a sale price. When there is no good match it says so.
   Use the Check live prices links to see real sold prices.
-- This copy manages listings inside itself: it tracks them, counts the
-  30 days, and tells you when something sells or time is up. It does not
-  post straight to the real marketplaces. To put a listing live on a
-  real site, open the site from the listing and post it there.
+- ShelfLife creates your listings. This copy prepares the complete
+  listing for each site, puts it in line for creation, and tracks its
+  true state: in line, being created, live, needs a check, or could
+  not be created. Creation runs through the live ShelfLife system.
+- A listing only counts as live when ShelfLife has its real address
+  on that site. The 30 days start when the first listing goes live,
+  not before. Listings saved by older versions without that proof
+  go back in line to be created.
 - Photos are resized when you add them so everything fits in browser
   storage on the device. A photo the browser cannot open (some HEIC,
   AVIF, or TIFF files) is still kept with the item instead of refused.

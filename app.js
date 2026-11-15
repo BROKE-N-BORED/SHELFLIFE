@@ -1,7 +1,12 @@
 /* ShelfLife - standalone single-page app.
    All state lives in browser storage on this device. No server, no build
    step, no external requests. Open index.html and it runs.
-   Copy rule: plain words, no em-dashes in visible text. */
+   Copy rule: plain words, no em-dashes in visible text.
+   Creation model (v1.1.0): ShelfLife CREATES the listings. This copy
+   prepares the complete listing, puts it in line for creation, tracks
+   its true state, and only counts a listing as live with proof: its
+   real address on that site's own domain. Creation runs through the
+   live ShelfLife system. This copy never fakes a state it cannot know. */
 
 (function () {
   'use strict';
@@ -199,6 +204,7 @@
       photoApplies: false }
   ];
 
+  var APP_VERSION = '1.1.0';
   var LISTING_DAYS = 30;
   var DAY_MS = 24 * 60 * 60 * 1000;
   var STORE_KEY = 'shelflife.v1';
@@ -323,7 +329,12 @@
       it.endedAt = now;
       it.endedReason = 'expired';
       for (var j = 0; j < it.sites.length; j++) {
-        if (it.sites[j].status === 'live') it.sites[j].status = 'ended';
+        /* The 30 days are up: live listings come down, and listings
+           still in line or being created are cancelled, not left
+           hanging. Closed listings stay closed. */
+        if (it.sites[j].status !== 'closed' && it.sites[j].status !== 'ended') {
+          it.sites[j].status = 'ended';
+        }
       }
       state.counters.alert += 1;
       var alert = {
@@ -360,9 +371,158 @@
     });
   }
 
+  function queuedItems(state) {
+    return state.items.filter(function (it) { return it.status === 'queued'; });
+  }
+
+  /* ---------------- Listing creation model (v1.1.0) ----------------
+     A listing is CREATED by ShelfLife, not just tracked. True states:
+     queued (in line to be created), creating (creation is underway),
+     live (only with proof: its real address on the site's own domain),
+     needs_check (the site itself asked for a human check),
+     failed (creation did not work, with the reason).
+     This copy never marks a listing live without the proof, and never
+     claims creation is underway unless it has been confirmed. */
+
+  var CHECK_KINDS = ['sign-in', 'puzzle', 'code'];
+
+  function checkLabel(kind) {
+    if (kind === 'sign-in') return 'Needs a sign-in';
+    if (kind === 'puzzle') return 'Needs a puzzle check';
+    if (kind === 'code') return 'Needs a verification code';
+    return 'Needs a human check';
+  }
+
+  function siteHost(site) {
+    if (!site || !site.url) return '';
+    var m = /^https?:\/\/([^\/:?#]+)/i.exec(site.url);
+    return m ? m[1].toLowerCase() : '';
+  }
+
+  function baseHost(host) {
+    return String(host || '').toLowerCase().replace(/^www\./, '');
+  }
+
+  /* Live-proof gate: the address must be on the site's own domain.
+     The bare domain, www, and other subdomains of that domain count.
+     Lookalike domains (ebay.example.com, fakeebay.com) do not. */
+  function isLiveProofUrl(site, url) {
+    if (!site || !url || typeof url !== 'string') return false;
+    var m = /^https?:\/\/([^\/:?#]+)/i.exec(url.trim());
+    if (!m) return false;
+    var host = baseHost(m[1]);
+    var want = baseHost(siteHost(site));
+    if (!want) return false;
+    return host === want || host.slice(-(want.length + 1)) === '.' + want;
+  }
+
+  /* Mark one listing live, but only with proof. Returns { ok, reason }.
+     The reason is plain words for the screen when the proof fails. */
+  function markListingLive(listing, site, url, now) {
+    if (!listing || !site) return { ok: false, reason: 'That listing is missing.' };
+    var clean = (url || '').trim();
+    if (!clean) return { ok: false, reason: 'Paste the listing address first.' };
+    if (!isLiveProofUrl(site, clean)) {
+      return { ok: false, reason: 'That address is not on ' + site.name + '. It has to be the real listing page on that site.' };
+    }
+    listing.status = 'live';
+    listing.listingUrl = clean;
+    listing.liveAt = now;
+    listing.checkKind = null;
+    listing.checkDetail = '';
+    listing.failReason = '';
+    return { ok: true, reason: '' };
+  }
+
+  /* The 30-day clock starts when the FIRST listing goes live, not
+     before. Returns true when the clock just started. */
+  function startClock(item, now) {
+    if (!item || item.status === 'live' || item.status === 'sold' || item.status === 'ended') return false;
+    var anyLive = false;
+    for (var i = 0; i < item.sites.length; i++) {
+      if (item.sites[i].status === 'live') { anyLive = true; break; }
+    }
+    if (!anyLive) return false;
+    item.status = 'live';
+    item.listedAt = now;
+    item.deadline = deadlineFrom(now);
+    return true;
+  }
+
+  function beginCreating(listing) {
+    if (!listing || listing.status !== 'queued') return false;
+    listing.status = 'creating';
+    return true;
+  }
+
+  function flagCheck(listing, kind, detail) {
+    if (!listing) return false;
+    if (listing.status !== 'queued' && listing.status !== 'creating') return false;
+    listing.status = 'needs_check';
+    listing.checkKind = CHECK_KINDS.indexOf(kind) !== -1 ? kind : 'sign-in';
+    listing.checkDetail = (detail || '').trim();
+    listing.failReason = '';
+    return true;
+  }
+
+  function failListing(listing, reason) {
+    if (!listing) return false;
+    if (listing.status !== 'queued' && listing.status !== 'creating') return false;
+    listing.status = 'failed';
+    listing.failReason = (reason || '').trim() || 'No reason given.';
+    listing.checkKind = null;
+    listing.checkDetail = '';
+    return true;
+  }
+
+  /* Try again after a check or a failure: back in line for creation. */
+  function retryListing(listing) {
+    if (!listing) return false;
+    if (listing.status !== 'needs_check' && listing.status !== 'failed') return false;
+    listing.status = 'queued';
+    listing.checkKind = null;
+    listing.checkDetail = '';
+    listing.failReason = '';
+    return true;
+  }
+
+  /* Migration for items saved before v1.1.0: listings that were only
+     tracked inside the app are NOT live. They go into the creation
+     queue, and the 30-day clock is cleared until one genuinely goes
+     live. A listing that already carries a real address on the site's
+     own domain keeps its live state. Returns how many items moved. */
+  function migrateLegacyListings(state) {
+    var moved = 0;
+    for (var i = 0; i < state.items.length; i++) {
+      var it = state.items[i];
+      if (it.status !== 'live') continue;
+      var keptLive = false;
+      for (var j = 0; j < it.sites.length; j++) {
+        var lg = it.sites[j];
+        if (lg.status !== 'live') continue;
+        var site = findSite(lg.siteId);
+        if (lg.listingUrl && site && isLiveProofUrl(site, lg.listingUrl)) {
+          keptLive = true;
+        } else {
+          lg.status = 'queued';
+          lg.listingUrl = null;
+          lg.liveAt = null;
+        }
+      }
+      if (!keptLive) {
+        it.status = 'queued';
+        it.listedAt = null;
+        it.deadline = null;
+        moved++;
+      }
+    }
+    state.version = 2;
+    return moved;
+  }
+
   function emptyState() {
     return {
-      version: 1,
+      version: 2,
       setup: null,
       accounts: {},
       items: [],
@@ -389,6 +549,10 @@
       parsed.items = parsed.items || [];
       parsed.alerts = parsed.alerts || [];
       parsed.counters = parsed.counters || { serial: 0, item: 0, alert: 0 };
+      /* Listings saved by older versions were only tracked inside the
+         app. They are not live: they go back in line to be created. */
+      var moved = migrateLegacyListings(parsed);
+      if (moved > 0) saveState(parsed);
       return parsed;
     } catch (e) {
       return emptyState();
@@ -603,13 +767,14 @@
 
   function renderHome() {
     var live = liveItems(state);
+    var queued = queuedItems(state);
     var sold = state.items.filter(function (it) { return it.status === 'sold'; }).length;
     var ended = platosItems(state).length;
     var html = '';
     if (state.items.length === 0) {
       html = '<p class="empty">Nothing on the shelf yet.<br>Tap Sell something to add your first item.</p>';
     } else {
-      html = '<p><strong>' + live.length + '</strong> live now &middot; <strong>' + sold + '</strong> sold &middot; <strong>' + ended + '</strong> on the Plato\'s Closet list</p>';
+      html = '<p><strong>' + live.length + '</strong> live now &middot; <strong>' + queued.length + '</strong> being created &middot; <strong>' + sold + '</strong> sold &middot; <strong>' + ended + '</strong> on the Plato\'s Closet list</p>';
       if (live.length > 0) {
         var soonest = null;
         for (var i = 0; i < live.length; i++) {
@@ -624,8 +789,123 @@
 
   /* ---------------- Items ---------------- */
 
+  /* Listing update panel state: which listing is open, and which
+     step of the update the seller is on. Only one panel opens at a
+     time, so the input ids inside it stay unique. */
+  var updatingKey = null;
+  var updateMode = 'menu'; /* menu | live | check | fail */
+  var updateCheckKind = 'sign-in';
+
+  function listingPill(lg) {
+    if (lg.status === 'live') return '<span class="pill pill-live">Live</span>';
+    if (lg.status === 'creating') return '<span class="pill pill-creating">Being created</span>';
+    if (lg.status === 'queued') return '<span class="pill pill-queued">In line</span>';
+    if (lg.status === 'needs_check') return '<span class="pill pill-check">Needs a check</span>';
+    if (lg.status === 'failed') return '<span class="pill pill-failed">Could not be created</span>';
+    return '<span class="pill pill-ended">Closed</span>';
+  }
+
+  function listingNote(lg, site) {
+    if (lg.status === 'live') {
+      return lg.liveAt ? 'Live since ' + formatDate(lg.liveAt) + '.' : 'Live.';
+    }
+    if (lg.status === 'creating') return 'ShelfLife is creating this listing.';
+    if (lg.status === 'queued') return 'In line. ShelfLife will create this listing.';
+    if (lg.status === 'needs_check') {
+      var note = checkLabel(lg.checkKind) + ' on ' + site.name + '.';
+      if (lg.checkDetail) note += ' ' + lg.checkDetail;
+      return note + ' Once it is done, tap Try again.';
+    }
+    if (lg.status === 'failed') return 'Could not be created: ' + (lg.failReason || 'No reason given.');
+    if (lg.status === 'closed') return 'Closed when the item sold.';
+    return 'Taken down.';
+  }
+
+  function updatePanelHtml(it, lg, site) {
+    var key = it.id + '|' + lg.siteId;
+    var head = '<div class="update-panel"><h2>What did ShelfLife say about this listing?</h2>';
+    var cancel = '<div class="row"><button class="btn btn-secondary btn-small" data-lcancel type="button">Cancel</button></div>';
+    if (updateMode === 'live') {
+      return head +
+        '<p>Paste the listing address. ShelfLife checks it is really on ' + escapeHtml(site.name) + ' before counting it as live.</p>' +
+        '<label class="field"><span class="field-label">Listing address</span>' +
+        '<input id="liveUrlInput" type="text" inputmode="url" placeholder="https://..."></label>' +
+        '<div class="row"><button class="btn btn-primary btn-small" data-lconfirm="' + key + '" type="button">Check the address</button>' +
+        '<button class="btn btn-secondary btn-small" data-lback type="button">Back</button></div>' + cancel + '</div>';
+    }
+    if (updateMode === 'check') {
+      var kinds = '';
+      var labels = { 'sign-in': 'Sign-in', 'puzzle': 'Puzzle check', 'code': 'Verification code' };
+      for (var k = 0; k < CHECK_KINDS.length; k++) {
+        var kind = CHECK_KINDS[k];
+        kinds += '<button class="chip" data-lcheckkind="' + kind + '" aria-pressed="' + (updateCheckKind === kind) + '" type="button">' + labels[kind] + '</button>';
+      }
+      return head +
+        '<p>What did the site ask for?</p><div class="chips">' + kinds + '</div>' +
+        '<label class="field"><span class="field-label">What exactly did it say? (optional)</span>' +
+        '<input id="checkDetailInput" type="text" placeholder="For example: asked me to sign in again"></label>' +
+        '<div class="row"><button class="btn btn-primary btn-small" data-lsavecheck="' + key + '" type="button">Save</button>' +
+        '<button class="btn btn-secondary btn-small" data-lback type="button">Back</button></div>' + cancel + '</div>';
+    }
+    if (updateMode === 'fail') {
+      return head +
+        '<p>What went wrong?</p>' +
+        '<label class="field"><span class="field-label">Reason</span>' +
+        '<input id="failReasonInput" type="text" placeholder="For example: the photo was rejected"></label>' +
+        '<div class="row"><button class="btn btn-primary btn-small" data-lsavefail="' + key + '" type="button">Save</button>' +
+        '<button class="btn btn-secondary btn-small" data-lback type="button">Back</button></div>' + cancel + '</div>';
+    }
+    return head +
+      '<div class="row"><button class="btn btn-secondary btn-small" data-lbegin="' + key + '" type="button">ShelfLife started creating it</button></div>' +
+      '<div class="row"><button class="btn btn-secondary btn-small" data-lmode="live" type="button">It is live</button></div>' +
+      '<div class="row"><button class="btn btn-secondary btn-small" data-lmode="check" type="button">It needs a check</button></div>' +
+      '<div class="row"><button class="btn btn-secondary btn-small" data-lmode="fail" type="button">It could not be created</button></div>' +
+      cancel + '</div>';
+  }
+
+  function listingRowHtml(it, lg) {
+    var site = findSite(lg.siteId);
+    if (!site) return '';
+    var actions = '';
+    if (lg.status === 'live' && lg.listingUrl) {
+      actions = '<a class="btn btn-secondary btn-small" href="' + escapeHtml(lg.listingUrl) + '" target="_blank" rel="noopener">View listing</a>';
+    } else if (lg.status === 'needs_check' || lg.status === 'failed') {
+      actions = '<button class="btn btn-primary btn-small" data-lretry="' + it.id + '|' + lg.siteId + '" type="button">Try again</button>' +
+        '<button class="btn btn-secondary btn-small" data-lupdate="' + it.id + '|' + lg.siteId + '" type="button">Update</button>';
+    } else if (lg.status === 'queued' || lg.status === 'creating') {
+      actions = '<button class="btn btn-secondary btn-small" data-lupdate="' + it.id + '|' + lg.siteId + '" type="button">Update</button>';
+    }
+    var panel = '';
+    if (updatingKey === it.id + '|' + lg.siteId) {
+      panel = updatePanelHtml(it, lg, site);
+    }
+    return '<div class="listing-row"><div class="listing-top"><span class="listing-site">' + escapeHtml(site.name) + '</span>' +
+      listingPill(lg) + '</div>' +
+      '<div class="listing-note">' + escapeHtml(listingNote(lg, site)) + '</div>' +
+      (actions ? '<div class="row listing-actions">' + actions + '</div>' : '') + panel + '</div>';
+  }
+
+  function findListing(key) {
+    var parts = String(key || '').split('|');
+    if (parts.length !== 2) return null;
+    var it = findItem(parts[0]);
+    if (!it) return null;
+    for (var i = 0; i < it.sites.length; i++) {
+      if (it.sites[i].siteId === parts[1]) {
+        return { item: it, listing: it.sites[i], site: findSite(parts[1]) };
+      }
+    }
+    return null;
+  }
+
+  function closeUpdatePanel() {
+    updatingKey = null;
+    updateMode = 'menu';
+  }
+
   function itemCardHtml(it) {
     var pill = it.status === 'live' ? '<span class="pill pill-live">Live</span>'
+      : it.status === 'queued' ? '<span class="pill pill-queued">In line</span>'
       : it.status === 'sold' ? '<span class="pill pill-sold">Sold</span>'
       : '<span class="pill pill-ended">Ended</span>';
     var thumb = it.photo
@@ -635,6 +915,8 @@
     if (it.status === 'live') {
       var d = daysLeft(it.deadline, Date.now());
       left = '<div class="item-meta"><span class="days-left' + (d <= 5 ? ' days-low' : '') + '">' + d + ' days left</span> of 30</div>';
+    } else if (it.status === 'queued') {
+      left = '<div class="item-meta">In line to be created. The 30 days start when the first listing goes live.</div>';
     } else if (it.status === 'sold') {
       left = '<div class="item-meta">Sold on ' + formatDate(it.soldAt) + '</div>';
     } else if (it.endedReason === 'expired') {
@@ -642,17 +924,16 @@
     } else {
       left = '<div class="item-meta">Taken down on ' + formatDate(it.endedAt) + '.</div>';
     }
-    var tags = '';
+    var listings = '';
     for (var i = 0; i < it.sites.length; i++) {
-      var s = findSite(it.sites[i].siteId);
-      if (!s) continue;
-      var closed = it.sites[i].status !== 'live';
-      tags += '<span class="site-tag' + (closed ? ' closed' : '') + '">' + escapeHtml(s.name) + '</span>';
+      listings += listingRowHtml(it, it.sites[i]);
     }
     var actions = '';
     if (it.status === 'live') {
       actions = '<div class="row"><button class="btn btn-primary btn-small" data-sold="' + it.id + '" type="button">It sold</button>' +
         '<button class="btn btn-secondary btn-small" data-takedown="' + it.id + '" type="button">Take it down</button></div>';
+    } else if (it.status === 'queued') {
+      actions = '<div class="row"><button class="btn btn-secondary btn-small" data-takedown="' + it.id + '" type="button">Take it down</button></div>';
     }
     actions += '<button class="btn btn-secondary btn-small" data-remove="' + it.id + '" type="button">Remove this item</button>';
     return '<div class="card"><div class="item-card">' + thumb +
@@ -660,7 +941,7 @@
       '<div class="item-serial">' + escapeHtml(it.serial) + ' &middot; ' + escapeHtml(categoryLabel(it.category)) + ' &middot; ' + escapeHtml(it.condition) + '</div>' +
       '<div class="item-meta">$' + escapeHtml(it.price) + '</div>' +
       pill + left + '</div></div>' +
-      '<div class="site-tags">' + tags + '</div>' + actions + '</div>';
+      '<div class="listings">' + listings + '</div>' + actions + '</div>';
   }
 
   function renderItems() {
@@ -691,7 +972,12 @@
       it.status = 'sold';
       it.soldAt = now;
       for (var i = 0; i < it.sites.length; i++) {
-        if (it.sites[i].status === 'live') it.sites[i].status = 'closed';
+        /* Live listings close, and listings still in line or being
+           created are cancelled: the item is gone, so nothing more
+           should go up for it. */
+        if (it.sites[i].status !== 'closed' && it.sites[i].status !== 'ended') {
+          it.sites[i].status = 'closed';
+        }
       }
       state.counters.alert += 1;
       state.alerts.unshift({
@@ -712,15 +998,20 @@
 
   function takeDown(id) {
     var it = findItem(id);
-    if (!it || it.status !== 'live') return;
-    confirmDialog('Take it down?', 'This takes ' + it.name + ' (' + it.serial + ') off all its sites now, before the 30 days are up.', 'Yes, take it down').then(function (yes) {
+    if (!it || (it.status !== 'live' && it.status !== 'queued')) return;
+    var text = it.status === 'queued'
+      ? 'This cancels the listings for ' + it.name + ' (' + it.serial + ') before they go live.'
+      : 'This takes ' + it.name + ' (' + it.serial + ') off all its sites now, before the 30 days are up.';
+    confirmDialog('Take it down?', text, 'Yes, take it down').then(function (yes) {
       if (!yes) return;
       var now = Date.now();
       it.status = 'ended';
       it.endedAt = now;
       it.endedReason = 'removed';
       for (var i = 0; i < it.sites.length; i++) {
-        if (it.sites[i].status === 'live') it.sites[i].status = 'ended';
+        if (it.sites[i].status !== 'closed' && it.sites[i].status !== 'ended') {
+          it.sites[i].status = 'ended';
+        }
       }
       persist();
       renderItems();
@@ -892,7 +1183,8 @@
     var bytes = storageBytes();
     var kb = (bytes / 1024).toFixed(0);
     $('settingsStorage').innerHTML = '<p>ShelfLife is using about <strong>' + kb + ' KB</strong> on this device for your items and photos.</p>' +
-      '<p class="field-help">Photos are resized when you add them so everything fits on the device.</p>';
+      '<p class="field-help">Photos are resized when you add them so everything fits on the device.</p>' +
+      '<p class="field-help">ShelfLife v' + APP_VERSION + '. Standalone copy. Creation runs through the live ShelfLife system.</p>';
   }
 
   function wipeAll() {
@@ -1001,10 +1293,11 @@
         '<p class="lede">ShelfLife ticked the sites most likely to sell this item. Untick any you do not want, or tick more.</p>' +
         sitesStepHtml() +
         '<div class="row">' + backBtn() +
-        '<button class="btn btn-primary" data-publish type="button">List it</button></div>';
+        '<button class="btn btn-primary" data-publish type="button">Create the listings</button></div>';
     } else if (draft.step === 7) {
       box.innerHTML = '<h1>It is on the shelf</h1>' +
-        '<div class="card"><p><strong>' + escapeHtml(draft.name) + '</strong> is listed on ' + draft.sites.length + ' sites for 30 days.</p>' +
+        '<div class="card"><p><strong>' + escapeHtml(draft.name) + '</strong> is in line to be listed on ' + draft.sites.length + ' sites.</p>' +
+        '<p>ShelfLife has the listings in line to be created. The 30 days start when the first one goes live.</p>' +
         '<p>Serial number: <strong>' + escapeHtml(draft.serial) + '</strong></p>' +
         '<p class="field-help">You will only hear about it if it sells, or when the 30 days are up.</p></div>' +
         '<div class="row"><button class="btn btn-primary" data-viewitems type="button">View my items</button>' +
@@ -1150,14 +1443,25 @@
       showToast('Tick at least one site to list on.');
       return;
     }
-    setStatus('Listing', true);
+    setStatus('Creating listings', true);
     var now = Date.now();
     state.counters.serial += 1;
     state.counters.item += 1;
     var serial = nextSerial(state.counters.serial - 1);
+    /* Listings start IN LINE, not live. The 30-day clock starts when
+       the first one genuinely goes live, never before. */
     var sites = [];
     for (var i = 0; i < draft.sites.length; i++) {
-      sites.push({ siteId: draft.sites[i], status: 'live' });
+      sites.push({
+        siteId: draft.sites[i],
+        status: 'queued',
+        listingUrl: null,
+        liveAt: null,
+        checkKind: null,
+        checkDetail: '',
+        failReason: '',
+        queuedAt: now
+      });
     }
     var item = {
       id: 'i' + state.counters.item,
@@ -1169,10 +1473,10 @@
       photo: draft.photo,
       scene: draft.scene,
       sites: sites,
-      status: 'live',
+      status: 'queued',
       createdAt: now,
-      listedAt: now,
-      deadline: deadlineFrom(now),
+      listedAt: null,
+      deadline: null,
       soldAt: null,
       endedAt: null,
       endedReason: null
@@ -1438,6 +1742,86 @@
         if (el.hasAttribute && el.hasAttribute('data-takedown')) { takeDown(el.getAttribute('data-takedown')); return; }
         if (el.hasAttribute && el.hasAttribute('data-remove')) { removeItem(el.getAttribute('data-remove')); return; }
         if (el.hasAttribute && el.hasAttribute('data-check')) { checkAccount(el.getAttribute('data-check')); return; }
+        if (el.hasAttribute && el.hasAttribute('data-lupdate')) {
+          var ukey = el.getAttribute('data-lupdate');
+          if (updatingKey === ukey) { closeUpdatePanel(); } else { updatingKey = ukey; updateMode = 'menu'; }
+          renderItems();
+          return;
+        }
+        if (el.hasAttribute && el.hasAttribute('data-lcancel')) { closeUpdatePanel(); renderItems(); return; }
+        if (el.hasAttribute && el.hasAttribute('data-lback')) { updateMode = 'menu'; renderItems(); return; }
+        if (el.hasAttribute && el.hasAttribute('data-lmode')) { updateMode = el.getAttribute('data-lmode'); renderItems(); return; }
+        if (el.hasAttribute && el.hasAttribute('data-lcheckkind')) { updateCheckKind = el.getAttribute('data-lcheckkind'); renderItems(); return; }
+        if (el.hasAttribute && el.hasAttribute('data-lbegin')) {
+          var foundBegin = findListing(el.getAttribute('data-lbegin'));
+          if (foundBegin && beginCreating(foundBegin.listing)) {
+            closeUpdatePanel();
+            persist();
+            renderItems();
+            showToast('Creation started.');
+          } else {
+            showToast('That listing is not in line any more.');
+          }
+          return;
+        }
+        if (el.hasAttribute && el.hasAttribute('data-lconfirm')) {
+          var foundLive = findListing(el.getAttribute('data-lconfirm'));
+          var urlInput = $('liveUrlInput');
+          var url = urlInput ? urlInput.value : '';
+          if (foundLive) {
+            var res = markListingLive(foundLive.listing, foundLive.site, url, Date.now());
+            if (res.ok) {
+              var started = startClock(foundLive.item, Date.now());
+              closeUpdatePanel();
+              persist();
+              renderItems();
+              showToast(started
+                ? 'Live on ' + foundLive.site.name + '. The 30 days have started.'
+                : 'Live on ' + foundLive.site.name + '.');
+            } else {
+              /* Keep the panel open so the address can be fixed. */
+              showToast(res.reason);
+            }
+          }
+          return;
+        }
+        if (el.hasAttribute && el.hasAttribute('data-lsavecheck')) {
+          var foundCheck = findListing(el.getAttribute('data-lsavecheck'));
+          var detailInput = $('checkDetailInput');
+          if (foundCheck && flagCheck(foundCheck.listing, updateCheckKind, detailInput ? detailInput.value : '')) {
+            closeUpdatePanel();
+            persist();
+            renderItems();
+            showToast('Saved. Once the check is done, tap Try again.');
+          } else {
+            showToast('That listing cannot take a check right now.');
+          }
+          return;
+        }
+        if (el.hasAttribute && el.hasAttribute('data-lsavefail')) {
+          var foundFail = findListing(el.getAttribute('data-lsavefail'));
+          var reasonInput = $('failReasonInput');
+          if (foundFail && failListing(foundFail.listing, reasonInput ? reasonInput.value : '')) {
+            closeUpdatePanel();
+            persist();
+            renderItems();
+            showToast('Saved.');
+          } else {
+            showToast('That listing cannot take a failure right now.');
+          }
+          return;
+        }
+        if (el.hasAttribute && el.hasAttribute('data-lretry')) {
+          var foundRetry = findListing(el.getAttribute('data-lretry'));
+          if (foundRetry && retryListing(foundRetry.listing)) {
+            persist();
+            renderItems();
+            showToast('Back in line to be created.');
+          } else {
+            showToast('That listing cannot be tried again right now.');
+          }
+          return;
+        }
         if (el.hasAttribute && el.hasAttribute('data-pickphoto')) { $('photoInput').click(); return; }
         if (el.hasAttribute && el.hasAttribute('data-addnext')) { addNext(); return; }
         if (el.hasAttribute && el.hasAttribute('data-addback')) { addBack(); return; }
@@ -1498,12 +1882,14 @@
   /* ---------------- Node exports for smoke tests ---------------- */
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
+      APP_VERSION: APP_VERSION,
       SITES: SITES,
       CATEGORIES: CATEGORIES,
       CONDITIONS: CONDITIONS,
       PRICE_GUIDE: PRICE_GUIDE,
       SCENES: SCENES,
       LISTING_DAYS: LISTING_DAYS,
+      CHECK_KINDS: CHECK_KINDS,
       findSite: findSite,
       categoryLabel: categoryLabel,
       nextSerial: nextSerial,
@@ -1518,8 +1904,19 @@
       checkExpiries: checkExpiries,
       unreadCount: unreadCount,
       liveItems: liveItems,
+      queuedItems: queuedItems,
       platosItems: platosItems,
       emptyState: emptyState,
+      siteHost: siteHost,
+      isLiveProofUrl: isLiveProofUrl,
+      markListingLive: markListingLive,
+      startClock: startClock,
+      beginCreating: beginCreating,
+      flagCheck: flagCheck,
+      failListing: failListing,
+      retryListing: retryListing,
+      checkLabel: checkLabel,
+      migrateLegacyListings: migrateLegacyListings,
       /* Test hook for the photo flow: the smoke tests drive the real
          handlePhotoFile with mocked browser APIs. */
       __photoTest: {
