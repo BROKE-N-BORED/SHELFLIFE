@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ShelfLife agent test pages</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 60px auto; padding: 0 24px; color: #222; }
+  .banner { background: #fff3cd; border: 2px solid #e6a800; padding: 14px 18px; border-radius: 10px; font-size: 18px; }
+  h1 { font-size: 32px; }
+  a.card { display: block; border: 2px solid #ddd; border-radius: 12px; padding: 20px 24px; margin: 16px 0; text-decoration: none; color: #222; }
+  a.card:hover { border-color: #888; }
+  a.card b { font-size: 22px; }
+  a.card p { margin: 8px 0 0; color: #555; font-size: 17px; }
+  code { background: #f0f0f0; padding: 2px 6px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="banner"><b>TEST PAGES</b> — these are fake pages for testing the ShelfLife agent. No real account is created, no real listing is posted.</div>
+<h1>ShelfLife agent test pages</h1>
+<p>Open these in Chromium at 1440&times;900. The agent runs each task against them and the results go into the baseline (see <code>SUITE.md</code>).</p>
+<a class="card" href="signup.html"><b>1. Signup</b><p>Create an account on the fake marketplace. Tests filling a form and submitting it.</p></a>
+<a class="card" href="listing.html"><b>2. Listing form</b><p>Publish a listing: photo, title, price, condition, description. Tests the core ShelfLife job.</p></a>
+<a class="card" href="grounding.html"><b>3. Grounding probe</b><p>Click 10 targets of different sizes and positions. Tests whether the model lands its clicks.</p></a>
+</body>
+</html>

@@ -72,6 +72,23 @@ in your browser on that device only. Nothing leaves the device.
 - `app.js` - all the logic: setup, items, listings, alerts, the
   Plato's Closet list, the price guide, and the staged photo maker.
 - `CHANGELOG.md` - what changed in each version.
+- `TASK-LIST.md` - the ShelfLife task list: what needs doing, in order,
+  and what is blocked on what.
+- `docs/fara-phase1.md` - the Fara backend check: the model pick
+  (Fara1.5-4B), the hardware fit, the OST verdict, the harness, the
+  trim-test-train cycle, and the build plan.
+- `agent-test/` - fake pages for testing the agent: a signup form, a
+  listing form, a 10-target grounding probe, and the suite spec
+  (`SUITE.md`). Local only, no real accounts or listings.
+
+## The agent backend
+
+ShelfLife's listings are created by a local AI agent (Microsoft's open
+Fara model) running on the seller's own PC — see `docs/fara-phase1.md`
+for the plan and `agent-test/` for the pages the agent is tested
+against. The app hands the agent a listing job; the agent reports back
+live (with the real listing address as proof), needs-a-check, or
+failed.
 
 ## Privacy
 

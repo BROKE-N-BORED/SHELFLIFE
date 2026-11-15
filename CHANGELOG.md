@@ -1,5 +1,24 @@
 # ShelfLife changelog
 
+## v1.2.0 - 2026-11-15
+
+Fara backend development materials. The app itself is unchanged; this
+release adds the plan and the test pages for the agent that creates
+the listings.
+
+- `docs/fara-phase1.md` - the backend check: Fara1.5-4B is the pick
+  (the 7B can't do signups or form submissions and needs 16 GB RAM);
+  it fits the 8 GB PC tight at Q4_K_M/IQ4_XS; OST works with it;
+  the harness is fara-cli; the method is Test -> Trim -> Test ->
+  Train -> repeat, baseline first.
+- `agent-test/` - fake pages for testing the agent: signup form,
+  listing form, 10-target grounding probe, and the suite spec.
+  Local only, no real accounts or listings.
+- `TASK-LIST.md` - the ShelfLife task list, in order, with what is
+  blocked on what.
+- Honest status: no model has produced a live action yet. The first
+  live action is Phase 2A step 1, on the PC.
+
 ## v1.1.0 - 2026-11-15
 
 Creation-model rebuild: ShelfLife creates the listings now. The old
