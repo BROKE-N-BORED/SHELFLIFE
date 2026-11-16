@@ -204,7 +204,7 @@
       photoApplies: false }
   ];
 
-  var APP_VERSION = '1.2.0';
+  var APP_VERSION = '1.1.0';
   var LISTING_DAYS = 30;
   var DAY_MS = 24 * 60 * 60 * 1000;
   var STORE_KEY = 'shelflife.v1';
